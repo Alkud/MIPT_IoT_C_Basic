@@ -1,106 +1,81 @@
-#include <inttypes.h>
+#ifndef TEMP_API_H
+#define TEMP_API_H
+
+#include "data_types.h"
 
 
-struct TemperatureInfo
-{
-    uint16_t yyyy; // year
-    uint8_t  mo;   // month
-    uint8_t  dd;   // day
-    uint8_t  hh;   // hours
-    uint8_t  mi;   // minutes
-    int8_t   temperature;
-};
-
-struct Date
-{
-    uint16_t yyyy;
-    uint8_t  mo;
-    uint8_t  dd;
-    uint8_t  hh;
-    uint8_t  mi;
-};
-
-const struct TemperatureInfo NULL_INFO = {
-    .yyyy = 0U,
-    .mo = 0U,
-    .dd = 0U,
-    .hh = 0U,
-    .mi = 0U,
+static const TemperatureInfo NULL_INFO = {
+    .date = {
+        .yyyy = 0U,
+        .mo = 0U,
+        .dd = 0U,
+        .hh = 0U,
+        .mi = 0U
+    },
     .temperature = 0U
 };
 
-struct TemperatureDataItem
-{
-    struct TemperatureInfo info; // данные
-    //struct TemperatureDataItem* prev;// указатель на предыдующий элемент
-    struct TemperatureDataItem* next;// указатель на следующий элемент
-};
+uint32_t DateToInt(Date* date, uint32_t precision);
+void IntToDate(uint32_t int_value, Date* date, uint32_t precision);
 
-struct TemperatureData
-{
-    struct TemperatureDataItem* items; // указатель на массив элементов
-    struct TemperatureDataItem* root;  // указатель на корневой элемент
-    struct TemperatureDataItem* last;  // указатель на последний добавленный элемент
-    uint32_t capacity;                 // ёмкость массива, максимально возможное число элементов
-    uint32_t size;                     // реальный размер массива - число элементов, содержащих полезную информацию
-};
 
-typedef struct TemperatureInfo* INFO_PTR;
-typedef struct TemperatureDataItem* ITEM_PTR;
-typedef struct TemperatureData* DATA_PTR;
+void DateToStr(Date* date, DateString* date_str);
 
-// Флаги сравнения элементов даты
-const uint32_t MINUTE_FACTOR = 1U;
-const uint32_t HOUR_FACTOR   = MINUTE_FACTOR * 100U;
-const uint32_t DAY_FACTOR    = HOUR_FACTOR * 100U;
-const uint32_t MONTH_FACTOR  = DAY_FACTOR * 100U;
-const uint32_t YEAR_FACTOR   = MONTH_FACTOR * 100U;
+uint64_t InfoToInt(TemperatureInfo* info, uint64_t date_precision);
 
-uint32_t DateToInt(struct Date date);
+
+void InfoToStr(TemperatureInfo* info, InfoString* info_str, uint8_t border);
 
 // Создание массива TemperatureInfo
 // Возвращает структуру с массивом элементов и служебными данными
-struct TemperatureData CreateTemperatureData(uint32_t capacity, const ITEM_PTR zero_item);
+TemperatureData CreateTemperatureData(uint32_t capacity, const ITEM_PTR zero_item);
 
 // Добавление записи в массив
 // Возвращает указатель на добавленный элемент
-INFO_PTR AddTemperatureInfo(DATA_PTR data, INFO_PTR info);
+ITEM_PTR AddTemperatureInfo(DATA_PTR data, INFO_PTR info);
 
 // Сброс элемента массива
-void ResetDataItem(ITEM_PTR item);
+ITEM_PTR ResetDataItem(ITEM_PTR item);
 
-// Удаление записи из массива
+// Удаление записи из массива по указателю на элемент
 // Возвращает указатель на элемент, следующий за удалённым
-INFO_PTR RemoveTemperatureInfo(DATA_PTR data, ITEM_PTR item);
+ITEM_PTR RemoveTemperatureInfoByPtr(DATA_PTR data, ITEM_PTR item);
 
-// Сортировка массива записей по дате
-// Возвращает указатель на новый корневой элемент
-INFO_PTR SortTemperatureInfoByDate(DATA_PTR data);
-
-// Сортировка массива записей по дате
-// Возвращает указатель на новый корневой элемент
-INFO_PTR SortTemperatureInfoByTemperature(DATA_PTR data);
+// Удаление записи из массива по значению элемента
+// Возвращает указатель на элемент, следующий за удалённым
+ITEM_PTR RemoveTemperatureInfoByValue(DATA_PTR data, INFO_PTR info);
 
 // Функция сравнения дат с указанием полей для сравнения
 // Возвращает -1 (меньше), 0 (равно), 1 (больше)
-int DateComparator(struct Date* date_a, struct Date* date_b, uint32_t cmp_factor);
+int64_t DateDiff(Date* date_a, Date* date_b, uint32_t precision);
+
+// Функция сравнения TemperatureInfo с указанием порядка полей для сортировки
+int64_t InfoDiff(INFO_PTR info_a, INFO_PTR info_b, uint64_t date_precision);
+
+// Сортировка массива записей по дате
+// Возвращает указатель на новый корневой элемент
+ITEM_PTR SortTemperatureInfoByDate(DATA_PTR data);
+
+// Сортировка массива записей по температуре
+// Возвращает указатель на новый корневой элемент
+ITEM_PTR SortTemperatureInfoByTemperature(DATA_PTR data);
 
 // Базова универсальная функция - статистика на произвольном интервале (точность определяется флагами сравнения элементов дат)
 // Записывает по требованию значения маскимального, среднего и минимального значения при ненулевых указателях
-void DateIntervalStatics(uint32_t data_size, struct TemperatureInfo data[], struct Date from_date,
-                         struct Date to_date, uint32_t cmp_factor, int8_t* avg, int8_t* min, int8_t* max);
+void DateIntervalStatics(DATA_PTR data, Date from_date, Date to_date, uint32_t precision,
+                         int8_t* avg, int8_t* min, int8_t* max);
 
 // Базовая универсальная функция - стастика за указанный год, месяц, день (определяется флагами сравнения элементов дат)
 // Записывает по требованию значения маскимального, среднего и минимального значения при ненулевых указателях
-void ExactDateStatics(uint32_t data_size, struct TemperatureInfo data[], struct Date date, uint32_t date_items,
-                      int8_t* avg, int8_t* min, int8_t* max);                                          
+void ExactDateStatics(DATA_PTR data, Date date, uint32_t precision, int8_t* avg, int8_t* min, int8_t* max);                                          
 
 // Статистика за конкретный год
 // Записывает по требованию значения маскимального, среднего и минимального значения при ненулевых указателях
-void YearStatistics(uint32_t data_size, struct TemperatureInfo data[], uint16_t year,
-                    int8_t* avg, int8_t* min, int8_t* max);
+void YearStatistics(DATA_PTR data, uint16_t year, int8_t* avg, int8_t* min, int8_t* max);
 
 // Статистика за конкретный месяц
 // Записывает по требованию значения маскимального, среднего и минимального значения при ненулевых указателях
-void MonthStatistics(uint32_t data_size, struct TemperatureInfo data[], uint16_t year, uint8_t,
+void MonthStatistics(uint32_t data_size, DATA_PTR data, uint16_t year, uint8_t,
                      int8_t* avg, int8_t* min, int8_t* max);
+
+#endif                     
