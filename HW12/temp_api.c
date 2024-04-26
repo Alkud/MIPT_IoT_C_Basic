@@ -17,7 +17,6 @@ TemperatureData CreateTemperatureData(const uint32_t capacity, const ITEM_PTR ze
     };
     for(uint32_t i = 0; i < capacity; ++i) {
         data.items[i].info = NULL_INFO;
-        //data.items[i].prev = NULL;
         data.items[i].next = NULL;
     }
     return data;
@@ -28,12 +27,11 @@ TemperatureData CreateTemperatureData(const uint32_t capacity, const ITEM_PTR ze
 ITEM_PTR AddTemperatureInfo(DATA_PTR const data, INFO_PTR const info)
 {
     if (data->size + 1 > data->capacity) {
-        // не удалсь вставить новый элемент, индекс последнего жлемента не изменился
+        // не удалсь вставить новый элемент, индекс последнего элемента не изменился
         return NULL;
     }
     if (0U == data->size) {
         data->items[0].info = *info;
-        //data->items[0].prev = NULL;
         data->items[0].next = NULL;
         data->root = &(data->items[0]);
         data->last = data->root;
@@ -41,16 +39,12 @@ ITEM_PTR AddTemperatureInfo(DATA_PTR const data, INFO_PTR const info)
         // находим незаполненный элемент
         uint32_t i = 0;
         for(; i < data->capacity; ++i) {
-            // if (NULL == data->items[i].prev && NULL == data->items[i].next) {
-            //     break;
-            // }
             if (NULL == data->items[i].next && data->last != &(data->items[i])) {
                 break;
             }
         }
         // записываем информацию
         data->items[i].info = *info;
-        //data->items[i].prev = data->last;
         data->items[i].next = NULL;
         // обновляем указатели на последний элемент
         data->last->next = &(data->items[i]);
@@ -67,7 +61,6 @@ ITEM_PTR ResetDataItem(ITEM_PTR const item)
         return NULL;
     }
     item->info = NULL_INFO;
-    //item->prev = NULL;
     ITEM_PTR next = item->next;
     item->next = NULL;
     return next;
@@ -94,20 +87,22 @@ ITEM_PTR RemoveTemperatureInfoByPtr(DATA_PTR data, ITEM_PTR item)
     if (NULL == data || 0 == data->size || item == NULL) {
         return NULL;
     }
-    //item->prev->next = item->next;
     ITEM_PTR prev = NULL;
+    ITEM_PTR next = NULL;
     if (item == data->root) {
+        //  удаляем корневой элемент - корневым становится следующий
         data->root = ResetDataItem(item);
     } else {
+        // сбрасываем, находим предыдущий и следующий за удаляемым элемент
         prev = PrevDataItem(data, item);
-    }
-    ITEM_PTR next = ResetDataItem(item);
+        next = ResetDataItem(item);
+    }    
     if (prev != NULL) {
+        // если у удаляемого есть предыдущий элемент, его следующим становится следующий удаляемого
         prev->next = next;
     }
-    if (data->last != item) {
-        data->last = next;
-    } else {
+    if (data->last == item) {
+        // если удаляется последний элемент, последним становится предыдущий
         data->last = prev;
     }
     data->size -= 1;
@@ -123,10 +118,14 @@ ITEM_PTR RemoveTemperatureInfoByValue(DATA_PTR data, INFO_PTR info)
     }
     // находим первый элемент, равный указанному значению
     ITEM_PTR item = data->root;
-    while (item != NULL && InfoDiff(&item->info, info, INFO_DP_MINUTE_PRECISION) != 0) {
+    while (item->next != NULL && InfoDiff(&item->info, info, INFO_DP_MINUTE_PRECISION) != 0) {
         item = item->next;
     }
-    return RemoveTemperatureInfoByPtr(data, item);
+    if (item != NULL) {
+        return RemoveTemperatureInfoByPtr(data, item);
+    } else {
+        return NULL;
+    }
 }
 
 uint32_t DateToInt(Date* date, uint32_t precision)
@@ -197,29 +196,72 @@ void InfoToStr(TemperatureInfo* info, InfoString* info_str, uint8_t border)
     DateToStr(&info->date, &ds);
     const char* row_delimiter = border ? "\n----------+-----+---" : "";
     if (NULL == info) {
-        sprintf(info_str->str, "%s| 00%s", ds.str, row_delimiter);
+        sprintf(info_str->str, "%s| 0 %s", ds.str, row_delimiter);
     } else {
         if (0 == info->temperature) {
-            sprintf(info_str->str, "%s| 00%s", ds.str, row_delimiter);
+            sprintf(info_str->str, "%s| 0 %s", ds.str, row_delimiter);
         } else {
-            sprintf(info_str->str, "%s|%+02d%s", ds.str, info->temperature, row_delimiter);
+            sprintf(info_str->str, "%s|%+-3d%s", ds.str, info->temperature, row_delimiter);
         }
     }
 }
 
+void PrintInfo(TemperatureInfo* info, uint8_t border)
+{
+    InfoString info_str;
+    InfoToStr(info, &info_str, border);
+    printf("%s\n", info_str.str);    
+}
+
+void PrintData(DATA_PTR data, uint8_t border, uint32_t* num_items, Date* start_date, uint32_t* date_precision)
+{
+    // если не указаны ни кол-во выводимых елементов, ни начальная дата, печатаем весь массив
+    uint32_t items_to_print = data->size;
+    ITEM_PTR current = data->root;
+    if (start_date != NULL && date_precision != NULL) {
+        uint32_t current_idx = 0;
+        while(current != NULL && DateDiff(&current->info.date, start_date, *date_precision) < 0) {
+            current = current->next;
+            ++current_idx;
+        }
+        if (current == NULL) {
+            // если указанная дата не найдена, выводим с первой даты
+            current = data->root;
+            if (num_items != NULL) {
+                items_to_print = (*num_items > data->size ? data->size : *num_items);
+            }
+        } else {
+            if (num_items != NULL) {
+                items_to_print = (*num_items > (data->size - current_idx) ? (data->size - current_idx) : *num_items);
+            } else {
+                items_to_print = data->size - current_idx;
+            }
+        }
+    } else if (num_items != NULL) {
+        items_to_print = (*num_items > data->size ? data->size : *num_items);
+    }
+    uint32_t item_count = 0;
+    while(current != NULL && item_count < items_to_print) {
+        ++item_count;
+        PrintInfo(&current->info, border);
+        current = current->next;
+    }
+}
+
 // Функция сравнения дат с указанием полей для сравнения
-// Возвращает -1 (меньше), 0 (равно), 1 (больше)
+// Возвращает - отрицательное целое (меньше), 0 (равно), положительное целое (больше)
 int64_t DateDiff(Date* date_a, Date* date_b, uint32_t precision)
 {
     return (int64_t)DateToInt(date_a, precision) - (int64_t)DateToInt(date_b, precision);
 }
 
-// Функция сравнения TemperatureInfo с указанием порядка полей для сортировки
+// Функция сравнения TemperatureInfo с указанием порядка полей (приоритет температуры / даты)
 int64_t InfoDiff(INFO_PTR info_a, INFO_PTR info_b, uint64_t date_precision)
 {
     return (int64_t)InfoToInt(info_a, date_precision) - (int64_t)InfoToInt(info_b, date_precision);
 }
 
+// перестановка элементов списка
 void SwapDataItems(DATA_PTR data, ITEM_PTR a, ITEM_PTR b)
 {
     if (NULL == data || NULL == a || NULL == b) {
@@ -237,109 +279,286 @@ void SwapDataItems(DATA_PTR data, ITEM_PTR a, ITEM_PTR b)
     a->next = b->next;
     b->next = tmp;
 }
-// вспомогательная функция сортировки - модияикация Count sort
+
+// Возвращает цифру из информационной записи
+// yyyy.mo.dd.hh.mi.ttt (приоритет даты) или ttt.yyyy.mo.dd.hh.mi (приоритет температуры)
+uint8_t InfoDigit(INFO_PTR info, uint8_t pos, uint8_t date_priority)
+{
+    uint8_t digit = 0;
+    if (date_priority) {
+        switch (pos)
+        {
+        case 0:
+            // младшая цифра температуры
+            digit = (info->temperature + UINT8_MAX) % 10;
+            break;
+        case 1:
+            digit = ((info->temperature + UINT8_MAX) / 10) % 10;
+            break;
+        case 2:
+            // старшая цифра температуры
+            digit = ((info->temperature + UINT8_MAX) / 100) % 10;
+            break;
+        case 3:
+            digit = (info->date.mi) % 10;
+            break;
+        case 4:
+            digit = ((info->date.mi) / 10) % 10;
+            break;
+        case 5:
+            digit = (info->date.hh) % 10;
+            break;
+        case 6:
+            digit = ((info->date.hh) / 10) % 10;
+            break;
+        case 7:
+            digit = (info->date.dd) % 10;
+            break;            
+        case 8:
+            digit = ((info->date.dd) / 10) % 10;
+            break;
+        case 9:
+            digit = (info->date.mo) % 10;
+            break;            
+        case 10:
+            digit = ((info->date.mo) / 10) % 10;
+            break;
+        case 11:
+            // младшая цифра года
+            digit = (info->date.yyyy) % 10;
+            break;
+        case 12:
+            digit = ((info->date.yyyy) / 10) % 10;
+            break;
+        case 13:
+            digit = ((info->date.yyyy) / 100) % 10;
+            break;
+        case 14:
+            // старшая цифра года
+            digit = ((info->date.yyyy) / 1000) % 10;
+            break;            
+        default:
+            break;
+        }
+    } else {
+        switch (pos)
+        {
+        case 0:
+            // младшая цифра года
+            digit = (info->date.yyyy) % 10;
+            break;
+        case 1:
+            digit = ((info->date.yyyy) / 10) % 10;
+            break;
+        case 2:
+            digit = ((info->date.yyyy) / 100) % 10;
+            break;
+        case 3:
+            // старшая цифра года
+            digit = ((info->date.yyyy) / 1000) % 10;
+            break;    
+
+        case 4:
+            digit = (info->date.mi) % 10;
+            break;
+        case 5:
+            digit = ((info->date.mi) / 10) % 10;
+            break;
+        case 6:
+            digit = (info->date.hh) % 10;
+            break;
+        case 7:
+            digit = ((info->date.hh) / 10) % 10;
+            break;
+        case 8:
+            digit = (info->date.dd) % 10;
+            break;            
+        case 9:
+            digit = ((info->date.dd) / 10) % 10;
+            break;
+        case 10:
+            digit = (info->date.mo) % 10;
+            break;            
+        case 11:
+            digit = ((info->date.mo) / 10) % 10;
+            break;
+        case 12:
+            // младшая цифра температуры
+            digit = (info->temperature + UINT8_MAX) % 10;
+            break;
+        case 13:
+            digit = ((info->temperature + UINT8_MAX) / 10) % 10;
+            break;
+        case 14:
+            // старшая цифра температуры
+            digit = ((info->temperature + UINT8_MAX) / 100) % 10;
+            break;
+        default:
+            break;            
+        }
+    }
+    return digit;
+}
+
+// Сортировка данных на основе Radix Sort
 // копирование или перемещение элементов не требуется
-// 1) находим минимальный элемент
-// 2) расстояние элемента от минимального равно его индексу в упорядоченном списке
+// 1) последовательно сортируем информационные записи по цифрам (вместо разрядов при сортировке целых чисел),
+//    сложность алгоритма линейная O(15*N): 15 - число цифр в каждой записи, N - число записей
+// 2) сортируются указатели на элементы списка, а не сами элементы, это сокращает объёмы коприрования
 // 3) т.к. структура организована как односвязный список, нет необходимости перемещать элементы,
 //    просто, переписываем root и для каждого элмента - указатель на следующий,
 // 4) таким образом, при проходе по списку от root получаем уопорядоченный по возрастанию список
-void SortTemperatureInfo_(DATA_PTR data, uint64_t date_precision)
+ITEM_PTR DataRadixSort(DATA_PTR data, uint8_t date_priority)
 {
-    // находим элемент с минимальным набором (дата + температура)
-    uint64_t min_info_int = UINT64_MAX;
-    ITEM_PTR item_ptrs[data->size];
-    ITEM_PTR min_info_ptr = NULL;
-    uint64_t info_int_values[data->size];
+    const uint8_t num_digits = 15U;
+    // партиции - на каждой итерации список элементов, имеющих одинаковую цифру на данной позиции в записи 
+    ITEM_PTR partitions[10][data->size];
     ITEM_PTR current = data->root;
-    uint32_t count = 0;
-    while (current != NULL) {
-        info_int_values[count] = InfoToInt(&current->info, date_precision);
-        printf("__ %u : %lu\n", count, info_int_values[count]);
-        item_ptrs[count] = current;
-        printf("-> %u : %lu\n", count, min_info_int);
-        if (info_int_values[count] < min_info_int) {
-            printf(">< %lu _ %lu\n", info_int_values[count], min_info_int);
-            min_info_int = info_int_values[count];
-            min_info_ptr = current;
-        }
-        printf("<- %u : %lu\n", count, min_info_int);
+    uint32_t item_count = 0;
+    ITEM_PTR data_item_pointers[data->size];
+    while(current != NULL) {
+        if (item_count >= data->size) {
+            // ошибочный размер
+            return NULL;
+        }      
+        data_item_pointers[item_count] = current;
+        ++item_count;
         current = current->next;
-        count += 1;
     }
-    // упорядочиваем указатели на элементы по возрастанию (дата + температура)
-    ITEM_PTR sorted_item_ptrs[data->size]; 
-    sorted_item_ptrs[0] = min_info_ptr;
-    for (uint32_t i = 1; i < data->size; ++i) {
-        sorted_item_ptrs[i] = NULL;
-    }
-    uint32_t offset = 0;   
-    for (uint32_t i = 0; i < data->size; ++i) {
-        uint64_t info_diff = info_int_values[i] - min_info_int;
-        printf(">> %lu, %lu, %lu\n", info_int_values[i], min_info_int, info_diff);
-        if (sorted_item_ptrs[info_diff] != NULL) {
-            // уже есть такой элемент, кладём следом за ним
-            offset += 1;
+    uint32_t partition_length[10];
+    for(uint32_t pos = 0; pos < num_digits; ++pos) {
+        // внешний цикл, число проходов -по числу цифр информационной записи
+        for (uint8_t row = 0; row < 10; ++row) {
+            partition_length[row] = 0;
+            for (uint32_t col = 0; col < data->size; ++col) {
+                partitions[row][col] = 0;
+            }
         }
-        sorted_item_ptrs[info_diff + offset] = item_ptrs[i];
+        for (uint32_t i = 0; i < data->size; ++i) {
+            // внутренний цикл, проходим по всему массиву, переносим в партиции указатели на элементы
+            // в соответствии с цифрами на текущей позиции в элементах
+            uint8_t digit = InfoDigit(&(data_item_pointers[i]->info), pos, date_priority);
+            partitions[digit][partition_length[digit]] = data_item_pointers[i];
+            partition_length[digit] += 1;
+        }
+        uint32_t idx = 0;
+        // собираем все партиции в один список и продолжаем сортировке по следующей позиции (цифре в записи)
+        for (uint8_t row = 0; row < 10; ++row) {
+            for (uint32_t col = 0; col < partition_length[row]; ++col) {
+                data_item_pointers[idx] = partitions[row][col];
+                ++idx;
+            }
+        }
     }
     // переписываем связи элементов так, чтобы от root они шли по возрастанию
-    data->root = sorted_item_ptrs[0];
+    data->root = data_item_pointers[0];
+    // указатели теперь лежат в порядке возрастания данных, просто считываем их все подряд
     current = data->root;
     for (uint32_t i = 1; i < data->size; ++i) {
-        current->next = sorted_item_ptrs[i];
+        current->next = data_item_pointers[i];
         current = current->next;
     }
     // новый последний элемент - последний в массиве отсортированных указателей
-    data->last = sorted_item_ptrs[data->size - 1];
-}
-// Сортировка массива записей по дате
-// Возвращает указатель на новый корневой элемент
-ITEM_PTR SortTemperatureInfoByDate(DATA_PTR data)
-{
-    if (NULL == data || 0 == data->size) {
-        return NULL;
-    }    
-    SortTemperatureInfo_(data, INFO_DP_MINUTE_PRECISION);
-    return data->root;
-}
-// Сортировка массива записей по температуре
-// Возвращает указатель на новый корневой элемент
-ITEM_PTR SortTemperatureInfoByTemperature(DATA_PTR data)
-{
-    if (NULL == data || 0 == data->size) {
-        return NULL;
-    }    
-    SortTemperatureInfo_(data, INFO_TP_MINUTE_PRECISION);
+    data->last = current;
+    data->last->next = NULL;
     return data->root;
 }
 
-// Базова универсальная функция - статистика на произвольном интервале (точность определяется флагами сравнения элементов дат)
+
+typedef int64_t (*DateComparator)(Date* date_cmp_1, Date* date_cmp_2, uint32_t* precision,
+                                  uint16_t* year, uint8_t* month, float* avg, int8_t* min, int8_t* max);
+
+void TemperatureStatistics(DATA_PTR data, Date* date_cmp_1, Date* date_cmp_2, uint32_t* precision,
+                           uint16_t* year, uint8_t* month, float* avg, int8_t* min, int8_t* max)
+{
+    ITEM_PTR current = data->root;
+    int8_t interval_min = INT8_MAX;
+    int8_t interval_max = INT8_MIN;
+    float interval_sum = 0.0F;
+    uint32_t item_count = 0;
+    while(current != NULL) {
+        uint8_t update_condition = 0;
+        Date* current_date = &current->info.date;
+        if (date_cmp_1 != NULL && date_cmp_2 != NULL) {
+            // интервал дат
+            int64_t from_diff = DateDiff(current_date, date_cmp_1, *precision);
+            int64_t to_diff = DateDiff(current_date, date_cmp_2, *precision);
+            update_condition = (from_diff >= 0) && (to_diff <= 0);
+        } else if (date_cmp_1 != NULL && date_cmp_2 == NULL) {
+            // точная дата (год + [месяц] + [день] + [час] - задаётся precision)
+            int64_t date_diff = DateDiff(current_date, date_cmp_1, *precision);
+            update_condition = (date_diff == 0);
+        } else if (year != NULL && month == NULL) {
+            // конкретный год
+            update_condition = (current_date->yyyy == *year);
+        } else if (year != NULL && month != NULL) {
+            // конкретный месяц  конкретного года
+            update_condition = (current_date->yyyy == *year) && (current_date->mo == *month);
+        }
+        if (update_condition) {
+            ++item_count;
+            int8_t current_temperature = current->info.temperature;
+            if (max != NULL && current_temperature > interval_max) {
+                interval_max = current_temperature;
+            }
+            if (min != NULL && current_temperature < interval_min) {
+                interval_min = current_temperature;
+            }
+            if (avg != NULL) {
+                interval_sum += (float)current_temperature;
+            }
+        }
+        current = current->next;
+    }
+    if (0 == item_count) {
+        if (max != NULL) {
+            *max = 0;
+        }
+        if (min != NULL) {
+            *min = 0;
+        }
+        if (avg != NULL) {
+            *avg = 0.0F;
+        }
+    } else {
+        if (max != NULL) {
+            *max = interval_max;
+        }
+        if (min != NULL) {
+            *min = interval_min;
+        }
+        if (avg != NULL) {
+            *avg = interval_sum / (float)item_count;
+        }
+    }
+}
+
+// Базовая универсальная функция - статистика на произвольном интервале (точность определяется флагами сравнения элементов дат)
 // Записывает по требованию значения маскимального, среднего и минимального значения при ненулевых указателях
 void DateIntervalStatics(DATA_PTR data, Date from_date, Date to_date, uint32_t precision,
-                         int8_t* avg, int8_t* min, int8_t* max)
+                         float* avg, int8_t* min, int8_t* max)
 {
-
+    TemperatureStatistics(data, &from_date, &to_date, &precision, NULL, NULL, avg, min, max);
 }
 
 // Базовая универсальная функция - стастика за указанный год, месяц, день (определяется флагами сравнения элементов дат)
 // Записывает по требованию значения маскимального, среднего и минимального значения при ненулевых указателях
-void ExactDateStatics(DATA_PTR data, Date date, uint32_t precision, int8_t* avg, int8_t* min, int8_t* max)
+void ExactDateStatics(DATA_PTR data, Date date, uint32_t precision, float* avg, int8_t* min, int8_t* max)
 {
-
+    TemperatureStatistics(data, &date, NULL, &precision, NULL, NULL, avg, min, max);
 }
 
 // Статистика за конкретный год
 // Записывает по требованию значения маскимального, среднего и минимального значения при ненулевых указателях
-void YearStatistics(DATA_PTR data, uint16_t year, int8_t* avg, int8_t* min, int8_t* max)
+void YearStatistics(DATA_PTR data, uint16_t year, float* avg, int8_t* min, int8_t* max)
 {
-
+    TemperatureStatistics(data, NULL, NULL, NULL, &year, NULL, avg, min, max);
 }
 
-// Статистика за конкретный месяц
+// Статистика за конкретный месяц конкретного года
 // Записывает по требованию значения маскимального, среднего и минимального значения при ненулевых указателях
-void MonthStatistics(uint32_t data_size, DATA_PTR data, uint16_t year, uint8_t,
-                     int8_t* avg, int8_t* min, int8_t* max)
+void MonthStatistics(uint32_t data_size, DATA_PTR data, uint16_t year, uint8_t month,
+                     float* avg, int8_t* min, int8_t* max)
 {
-
+    TemperatureStatistics(data, NULL, NULL, NULL, &year, &month, avg, min, max);
 }                     

@@ -70,7 +70,6 @@ typedef struct TemperatureDataItem TemperatureDataItem;
 struct TemperatureDataItem
 {
     TemperatureInfo info; // данные
-    //struct TemperatureDataItem* prev;// указатель на предыдующий элемент
     TemperatureDataItem* next;// указатель на следующий элемент
 };
 

@@ -28,7 +28,7 @@ void RadixSort(uint32_t size, uint64_t array[])
     }
     uint32_t max_length_count = 0;
     for (uint32_t i = 0; i < num_digits; ++i) {
-        if (item_length_count[i] > max_length_count); {
+        if (item_length_count[i] > max_length_count) {
             max_length_count = item_length_count[i];
         }
     }
