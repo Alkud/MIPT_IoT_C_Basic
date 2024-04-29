@@ -156,10 +156,10 @@ void DateToStr(Date* date, DateString* date_str)
 {
     if (NULL == date) {
         sprintf(
-            date_str->str, "%04hu.%02hhu.%02hhu|%02hhu:%02hhu",
+            date_str->str, " %04hu.%02hhu.%02hhu | %02hhu:%02hhu ",
             NULL_INFO.date.yyyy, NULL_INFO.date.mo, NULL_INFO.date.dd, NULL_INFO.date.hh, NULL_INFO.date.mi);    
     } else {
-        sprintf(date_str->str, "%04hu.%02hhu.%02hhu|%02hhu:%02hhu", date->yyyy, date->mo, date->dd, date->hh, date->mi);
+        sprintf(date_str->str, " %04hu.%02hhu.%02hhu | %02hhu:%02hhu ", date->yyyy, date->mo, date->dd, date->hh, date->mi);
     }
 }
 
@@ -194,14 +194,14 @@ void InfoToStr(TemperatureInfo* info, InfoString* info_str, uint8_t border)
 {
     DateString ds;
     DateToStr(&info->date, &ds);
-    const char* row_delimiter = border ? "\n----------+-----+---" : "";
+    const char* row_delimiter = border ? "\n------------+-------+-----" : "";
     if (NULL == info) {
         sprintf(info_str->str, "%s| 0 %s", ds.str, row_delimiter);
     } else {
         if (0 == info->temperature) {
             sprintf(info_str->str, "%s| 0 %s", ds.str, row_delimiter);
         } else {
-            sprintf(info_str->str, "%s|%+-3d%s", ds.str, info->temperature, row_delimiter);
+            sprintf(info_str->str, "%s| %+3d%s", ds.str, info->temperature, row_delimiter);
         }
     }
 }
@@ -213,39 +213,53 @@ void PrintInfo(TemperatureInfo* info, uint8_t border)
     printf("%s\n", info_str.str);    
 }
 
-void PrintData(DATA_PTR data, uint8_t border, uint32_t* num_items, Date* start_date, uint32_t* date_precision)
+void PrintData(DATA_PTR data, ITEM_PTR first_item, Date* start_date, uint32_t* date_precision,
+               uint32_t* num_items, uint8_t border)
 {
     // если не указаны ни кол-во выводимых елементов, ни начальная дата, печатаем весь массив
-    uint32_t items_to_print = data->size;
-    ITEM_PTR current = data->root;
+    ITEM_PTR current;
     if (start_date != NULL && date_precision != NULL) {
         uint32_t current_idx = 0;
         while(current != NULL && DateDiff(&current->info.date, start_date, *date_precision) < 0) {
             current = current->next;
             ++current_idx;
         }
-        if (current == NULL) {
-            // если указанная дата не найдена, выводим с первой даты
+    } else {
+        if (NULL == first_item) {
             current = data->root;
-            if (num_items != NULL) {
-                items_to_print = (*num_items > data->size ? data->size : *num_items);
-            }
         } else {
-            if (num_items != NULL) {
-                items_to_print = (*num_items > (data->size - current_idx) ? (data->size - current_idx) : *num_items);
-            } else {
-                items_to_print = data->size - current_idx;
-            }
+            current = first_item;
         }
-    } else if (num_items != NULL) {
-        items_to_print = (*num_items > data->size ? data->size : *num_items);
+    }
+    if (NULL == current) {
+        // если не найдена дата или неверно указан элемента, печатаем с начала
+        current = data->root;
     }
     uint32_t item_count = 0;
-    while(current != NULL && item_count < items_to_print) {
+    while(current != NULL && item_count < *num_items) {
         ++item_count;
         PrintInfo(&current->info, border);
         current = current->next;
     }
+}
+
+void PrintDataHead(DATA_PTR data, uint32_t* num_items, uint8_t border)
+{
+    PrintData(data, NULL, NULL, NULL, *num_items > data->size ? &data->size : num_items, border);
+}
+
+void PrintDataTail(DATA_PTR data, uint32_t* num_items, uint8_t border)
+{  
+    ITEM_PTR current = data->root;
+    if (*num_items > data->size) {
+        PrintData(data, NULL, NULL, NULL, &data->size, border);
+    }
+    uint32_t item_index = 0;
+    while (current != NULL && item_index < (data->size - *num_items)) {
+        current = current->next;
+        ++item_index;
+    }
+    PrintData(data, current, NULL, NULL, num_items, border);
 }
 
 // Функция сравнения дат с указанием полей для сравнения
@@ -557,8 +571,109 @@ void YearStatistics(DATA_PTR data, uint16_t year, float* avg, int8_t* min, int8_
 
 // Статистика за конкретный месяц конкретного года
 // Записывает по требованию значения маскимального, среднего и минимального значения при ненулевых указателях
-void MonthStatistics(uint32_t data_size, DATA_PTR data, uint16_t year, uint8_t month,
+void MonthStatistics(DATA_PTR data, uint16_t year, uint8_t month,
                      float* avg, int8_t* min, int8_t* max)
 {
     TemperatureStatistics(data, NULL, NULL, NULL, &year, &month, avg, min, max);
-}                     
+}
+
+uint8_t UniqueYears(DATA_PTR data, uint16_t years[])
+{
+    if (NULL == data || NULL == data->root) {
+        return 0;
+    }
+    ITEM_PTR current = data->root;
+    uint16_t current_year = 0;
+    uint32_t years_count = 0;
+    while(current != NULL) {
+        if (current->info.date.yyyy != current_year) {
+            current_year = current->info.date.yyyy;
+            years[years_count] = current_year;
+            ++years_count;
+            
+        }
+        current = current->next;
+    }
+    return years_count;
+}
+
+uint16_t UniqueMonths(DATA_PTR data, uint16_t years[], uint8_t months[])
+{
+    if (NULL == data || NULL == data->root) {
+        return 0;
+    }
+    ITEM_PTR current = data->root;
+    uint16_t current_year = 0;
+    uint8_t current_month = 0;
+    uint16_t months_count = 0;
+    while(current != NULL) {
+        if (current->info.date.yyyy == current_year && current->info.date.mo != current_month) {
+            current_year = current->info.date.yyyy;
+            current_month = current->info.date.mo;
+            months[months_count] = current_month;
+            years[months_count] = current_year;
+            ++months_count;
+            current_month = current->info.date.mo;
+        } else if (current->info.date.yyyy != current_year) {
+            current_year = current->info.date.yyyy;
+            current_month = current->info.date.mo;
+            months[months_count] = current_month;
+            years[months_count] = current_year;
+            ++months_count;            
+        }
+        current = current->next;
+    }
+    return months_count;
+}
+
+// Статистика по годам
+uint8_t PerYearStatistics(DATA_PTR data, StatisticsArrayRecord array[])
+{
+    uint16_t unique_years[100];
+    uint8_t years_count = UniqueYears(data, unique_years);
+    for(uint8_t n = 0; n < years_count; ++n) {
+        array[n].year = unique_years[n];
+        YearStatistics(data, unique_years[n], &array[n].avg, &array[n].min, &array[n].max);
+    }
+    return years_count;
+}
+
+// Статистика по месяцам
+uint16_t PerMonthStatistics(DATA_PTR data, StatisticsArrayRecord array[])
+{
+    uint16_t unique_years[1200];
+    uint8_t unique_months[1200];
+    uint8_t months_count = UniqueMonths(data, unique_years, unique_months);
+    for(uint8_t n = 0; n < months_count; ++n) {
+        array[n].year = unique_years[n];
+        array[n].month = unique_months[n];
+        MonthStatistics(data, unique_years[n], unique_months[n], &array[n].avg, &array[n].min, &array[n].max);
+    }
+    return months_count;
+}
+
+void PrintStatisticsRecord(StatisticsArrayRecord* record)
+{
+    if (0 == record->month) {
+        printf("   %04hu  | %+6.2f | %+6.2f | %+6.2f \n", record->year, (float)record->min, (float)record->max,record->avg);
+        printf("---------+--------+--------+--------\n");
+    } else {
+        printf(" %04hu.%02hu | %+6.2f | %+6.2f | %+6.2f \n", record->year, record->month, (float)record->min, (float)record->max,record->avg);
+        printf("---------+--------+--------+--------\n");
+    }
+}
+
+void PrintStatisticsArray(uint16_t size, StatisticsArrayRecord* array)
+{
+    if (0 == array[0].month) {
+        printf("   год   |  мин.  |  макс. |  сред.  \n");
+        printf("---------+--------+--------+--------\n");
+    } else {
+        printf("год.мес. |  мин.  |  макс. | сред.  \n");
+        printf("---------+--------+--------+--------\n");
+    }
+    for(uint16_t i = 0; i < size; ++i) {
+        PrintStatisticsRecord(&array[i]);
+    }
+}
+

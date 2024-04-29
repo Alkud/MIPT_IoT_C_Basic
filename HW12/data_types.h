@@ -121,7 +121,7 @@ static const uint64_t INFO_TP_MINUTE_PRECISION = INFO_TP_HOUR_PRECISION  | INFO_
 
 typedef struct
 {
-    char str[18];
+    char str[26];
 } DateString;
 
 typedef struct

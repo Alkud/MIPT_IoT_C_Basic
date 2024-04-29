@@ -28,7 +28,11 @@ void InfoToStr(TemperatureInfo* info, InfoString* info_str, uint8_t border);
 
 void PrintInfo(TemperatureInfo* info, uint8_t border);
 
-void PrintData(DATA_PTR data, uint8_t border, uint32_t* num_items, Date* start_date, uint32_t* date_precision);
+void PrintData(DATA_PTR data, ITEM_PTR first_item, Date* start_date, uint32_t* date_precision,
+               uint32_t* num_items, uint8_t border);
+
+void PrintDataHead(DATA_PTR data, uint32_t* num_items, uint8_t border);
+void PrintDataTail(DATA_PTR data, uint32_t* num_items, uint8_t border);
 
 // Создание массива TemperatureInfo
 // Возвращает структуру с массивом элементов и служебными данными
@@ -73,7 +77,28 @@ void YearStatistics(DATA_PTR data, uint16_t year, float* avg, int8_t* min, int8_
 
 // Статистика за конкретный месяц
 // Записывает по требованию значения маскимального, среднего и минимального значения при ненулевых указателях
-void MonthStatistics(uint32_t data_size, DATA_PTR data, uint16_t year, uint8_t month,
+void MonthStatistics(DATA_PTR data, uint16_t year, uint8_t month,
                      float* avg, int8_t* min, int8_t* max);
+
+typedef struct {
+    uint16_t year;
+    uint8_t month;
+    float avg;
+    int8_t min; 
+    int8_t max;
+} StatisticsArrayRecord;
+
+uint8_t UniqueYears(DATA_PTR data, uint16_t years[]);
+uint16_t UniqueMonths(DATA_PTR data, uint16_t years[], uint8_t months[]);
+
+// Статистика по годам
+uint8_t PerYearStatistics(DATA_PTR data, StatisticsArrayRecord array[]);
+
+// Статистика по месяцам
+uint16_t PerMonthStatistics(DATA_PTR data, StatisticsArrayRecord array[]);
+
+void PrintStatisticsRecord(StatisticsArrayRecord* record);
+
+void PrintStatisticsArray(uint16_t size, StatisticsArrayRecord* array);
 
 #endif                     
