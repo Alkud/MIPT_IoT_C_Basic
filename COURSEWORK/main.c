@@ -1,18 +1,17 @@
 #include <stdio.h>
 #include <unistd.h>
+#include <locale.h>
 
 #include "program_arguments.h"
 #include "temp_api.h"
 #include "csv_reader.h"
 
-// Максимальное число записей, помещающееся на стеке с учётом расходов на сортировку
-const uint32_t MAX_DATA_SIZE = 60000;
-
 int main(int argc, char* argv[])
 {
+    setlocale(LC_ALL, "ru_RU.UTF-8");
+
     ProgramArguments arguments = {
             .sort_by_temperature = 0,
-            .sort_by_date = 0,
             .items_to_print = 0,
             .y = 0,
             .m = 0,
@@ -38,16 +37,17 @@ int main(int argc, char* argv[])
     }
 
     uint32_t data_capacity = 2 * csv_descriptor.approx_data_size;
-    if (data_capacity > MAX_DATA_SIZE) {
-        data_capacity = MAX_DATA_SIZE;
+    TemperatureData temperature_data = CreateTemperatureData(data_capacity);
+    if (NULL == temperature_data.items) {
+        printf("Не удалось выделить память для данных\n");
+        return -1;
     }
-    TemperatureDataItem data_items[data_capacity];
-    TemperatureData temperature_data = CreateTemperatureData(data_capacity, &data_items[0]);
 
     int res;
+    uint32_t lines_count = 0;
     while ((res = GetNextRow(&csv_descriptor)) != EOF) {
         if (BAD_ROW == res) {
-            printf("\tигнорирована некорректная строка: %s\n", csv_descriptor.buffer);
+            printf("\tигнорирована некорректная строка №%u : %s\n", lines_count, csv_descriptor.buffer);
             continue;
         } 
         TemperatureInfo new_info = {
@@ -62,8 +62,27 @@ int main(int argc, char* argv[])
             printf("Достигнут предельный объём данных!\n");
             break;
         }
+        ++lines_count;
     }
     CloseFile(&csv_descriptor);
+
+    DataRadixSort(&temperature_data, 1);
+    if (0 == arguments.y) {
+        StatisticsArrayRecord per_month_statisitcs[1200];
+        uint16_t month_count = PerMonthStatistics(&temperature_data, per_month_statisitcs);
+        printf("Статистика месячных температур:\n");
+        PrintStatisticsArray(month_count, per_month_statisitcs);
+        StatisticsArrayRecord per_year_statisitcs[100];
+        uint16_t years_count = PerYearStatistics(&temperature_data, per_year_statisitcs);
+        printf("\nСтатистика годовых температур:\n");
+        PrintStatisticsArray(years_count, per_year_statisitcs);
+
+        if (arguments.sort_by_temperature) {
+            goto temp_sort;
+        }
+
+        return 0;     
+    }
 
     Date start_date = {
             .yyyy = arguments.y,
@@ -78,24 +97,6 @@ int main(int argc, char* argv[])
             start_date_precision = DATE_DAY_PRECISION;
         } else {
             start_date_precision = DATE_MONTH_PRECISION;
-        }
-    }
-    if (arguments.sort_by_date || arguments.sort_by_temperature) {
-        uint32_t* items_to_print = NULL;
-        if (arguments.items_to_print != 0) {
-            items_to_print = &arguments.items_to_print;
-        }
-        if (arguments.sort_by_date) {
-            printf("Сортировка по дате:\n");
-            printf("----------+-----+---\n");
-            DataRadixSort(&temperature_data, 1);
-            PrintData(&temperature_data, 1, items_to_print, &start_date, &start_date_precision);
-        }
-        if (arguments.sort_by_temperature) {
-            printf("Сортировка по температуре:\n");
-            printf("----------+-----+---\n");
-            DataRadixSort(&temperature_data, 0);
-            PrintData(&temperature_data, 1, items_to_print, &start_date, &start_date_precision);
         }
     }
 
@@ -156,5 +157,25 @@ int main(int argc, char* argv[])
         printf("средняя : %+6.2f градусов\n", temp_avg);
     }
 
+temp_sort:
+    if (arguments.sort_by_temperature) {        
+        uint32_t* items_to_print = NULL;
+        if (arguments.items_to_print != 0) {
+            items_to_print = &arguments.items_to_print;
+        }
+        if (arguments.sort_by_temperature) {
+            DataRadixSort(&temperature_data, 0);
+            printf("\nСортировка по температуре:\n");
+            printf("самые холодные дни:\n");
+            printf("------------+-------+-----\n");            
+            PrintDataHead(&temperature_data, items_to_print, 1);
+            printf("самые тёплые дни:\n");
+            printf("------------+-------+-----\n");            
+            PrintDataTail(&temperature_data, items_to_print, 1);
+        }
+    }
+
+    // освобождаем память
+    ClearTemperatureData(&temperature_data);
     return 0;
 }
