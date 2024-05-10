@@ -76,8 +76,11 @@ int ParseArguments(int argc, char* argv[], ProgramArguments* arguments)
                 sscanf(optarg, "%hhu", &arguments->D);
                 break;
             case ':':
-                printf("опция -%c требует значения\n", optopt);
+                printf("Ошибка! Опция -%c требует значения\n\n", optopt);
                 need_help = 1;
+            case '?':
+                printf("Ошибка! Неизвестная опция -%c\n\n", optopt);
+                need_help = 1;                
             default:
                 break;
         };
@@ -88,12 +91,12 @@ int ParseArguments(int argc, char* argv[], ProgramArguments* arguments)
     }
     if (arguments->y == 0 && (arguments->m != 0 || arguments->d != 0)) {
         printf("Ошибка! Если указана опция -m, должна быть указана опция -y\n");
-        printf("        Если указана опция -d, должный быть указаны -y и -m\n");
+        printf("        Если указана опция -d, должны быть указаны -y и -m\n\n");
         need_help = 1;        
     }
     if (arguments->Y == 0 && (arguments->Y != 0 || arguments->D != 0)) {
         printf("Ошибка! Если указана опция -M, должна быть указана опция -Y\n");
-        printf("        Если указана опция -D, должный быть указаны -Y и -M\n");
+        printf("        Если указана опция -D, должны быть указаны -Y и -M\n\n");
         need_help = 1;        
     }
     if (arguments ->Y != 0 && ((arguments->m != 0 && arguments->M == 0) || (arguments->d != 0 && arguments->D == 0))) {

@@ -80,6 +80,8 @@ int main(int argc, char* argv[])
         if (arguments.sort_by_temperature) {
             goto temp_sort;
         }
+        // освобождаем память
+        ClearTemperatureData(&temperature_data);
 
         return 0;     
     }
