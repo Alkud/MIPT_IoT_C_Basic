@@ -14,12 +14,14 @@ TemperatureData CreateTemperatureData(const uint32_t capacity)
         .items = items_ptr,
         .root = NULL,
         .last = NULL,
+        .cue = NULL,
         .capacity = capacity,
         .size = 0U
     };
     for (uint32_t i = 0; i < data.capacity; ++i) {
         data.items[i].info = NULL_INFO;
         data.items[i].next = NULL;
+        data.items[i].empty = 1U;
     }
     return data;
 }
@@ -36,6 +38,7 @@ void ClearTemperatureData(DATA_PTR data)
     data->items = NULL;
     data->root = NULL;
     data->last = NULL;
+    data->cue = NULL;
     data->size = 0;
     data->capacity = 0;
 }
@@ -75,19 +78,21 @@ ITEM_PTR AddTemperatureInfo(DATA_PTR const data, INFO_PTR const info)
         data->root = &(data->items[0]);
         data->last = data->root;
     } else {
-        // находим незаполненный элемент
-        uint32_t i = 0;
-        for(; i < data->capacity; ++i) {
-            if (NULL == data->items[i].next && data->last != &(data->items[i])) {
-                break;
-            }
+        TemperatureDataItem* destination;
+        if (data->cue != NULL) {
+        // есть освободившиеся елементы
+            destination = data->cue;
+            data->cue = data->cue->next;
+        } else {
+            destination = &data->items[data->size];
         }
         // записываем информацию
-        data->items[i].info = *info;
-        data->items[i].next = NULL;
+        destination->empty = 0;
+        destination->info = *info;
+        destination->next = NULL;
         // обновляем указатели на последний элемент
-        data->last->next = &(data->items[i]);
-        data->last = &(data->items[i]);
+        data->last->next = destination;
+        data->last = destination;
     }
     data->size += 1;
     return data->last;
@@ -102,6 +107,7 @@ ITEM_PTR ResetDataItem(ITEM_PTR const item)
     item->info = NULL_INFO;
     ITEM_PTR next = item->next;
     item->next = NULL;
+    item->empty = 1U;
     return next;
 }
 
@@ -145,6 +151,13 @@ ITEM_PTR RemoveTemperatureInfoByPtr(DATA_PTR data, ITEM_PTR item)
         data->last = prev;
     }
     data->size -= 1;
+    if (NULL == data->cue) {
+        if (data->size > 0) {
+            data->cue = item;
+        }
+    } else {
+        data->cue->next = item;
+    }    
     return next;
 }
 
@@ -231,17 +244,16 @@ uint64_t InfoToInt(TemperatureInfo* info, uint64_t date_precision)
 
 void InfoToStr(TemperatureInfo* info, InfoString* info_str, uint8_t border)
 {
+    if (NULL == info || NULL == info_str) {
+        return;
+    }
     DateString ds;
     DateToStr(&info->date, &ds);
     const char* row_delimiter = border ? "\n------------+-------+-----" : "";
-    if (NULL == info) {
+    if (0 == info->temperature) {
         sprintf(info_str->str, "%s| 0 %s", ds.str, row_delimiter);
     } else {
-        if (0 == info->temperature) {
-            sprintf(info_str->str, "%s| 0 %s", ds.str, row_delimiter);
-        } else {
-            sprintf(info_str->str, "%s| %+3d%s", ds.str, info->temperature, row_delimiter);
-        }
+        sprintf(info_str->str, "%s| %+3d%s", ds.str, info->temperature, row_delimiter);
     }
 }
 

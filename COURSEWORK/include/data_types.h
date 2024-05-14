@@ -69,6 +69,7 @@ typedef union
 typedef struct TemperatureDataItem TemperatureDataItem;
 struct TemperatureDataItem
 {
+    uint8_t empty;
     TemperatureInfo info; // данные
     TemperatureDataItem* next;// указатель на следующий элемент
 };
@@ -78,6 +79,7 @@ typedef struct
     TemperatureDataItem* items; // указатель на массив элементов
     TemperatureDataItem* root;  // указатель на корневой элемент
     TemperatureDataItem* last;  // указатель на последний добавленный элемент
+    TemperatureDataItem* cue;   // указатель на начало очереди освободившихся элементов
     uint32_t capacity;          // ёмкость массива, максимально возможное число элементов
     uint32_t size;              // реальный размер массива - число элементов, содержащих полезную информацию
 } TemperatureData;
@@ -121,12 +123,12 @@ static const uint64_t INFO_TP_MINUTE_PRECISION = INFO_TP_HOUR_PRECISION  | INFO_
 
 typedef struct
 {
-    char str[26];
+    char str[40];
 } DateString;
 
 typedef struct
 {
-    char str[52];
+    char str[57];
 } InfoString;
 
 #endif
